@@ -257,9 +257,52 @@ Resources:
           FromPort: 80
           ToPort: 80
           CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
       Tags: 
         - Key: Name
           Value: HelloWorld Instance SG
+
+  HelloWorldRole: 
+    Type: AWS::IAM::Role
+    Properties: 
+      AssumeRolePolicyDocument: 
+        Version: "2012-10-17"
+        Statement: 
+          - Effect: "Allow"
+            Principal: 
+              Service: 
+                - "ec2.amazonaws.com"
+            Action: 
+              - "sts:AssumeRole"
+      Path: "/"
+
+  HelloWorldRolePolicy: 
+    Type: AWS::IAM::Policy
+    Properties: 
+      PolicyName: "root"
+      PolicyDocument: 
+        Version: "2012-10-17"
+        Statement: 
+          - Effect: "Allow"
+            Action: "iam:ListUsers"
+            Resource: "*"
+      Roles: 
+        - !Ref HelloWorldRole
+
+  HelloWorldInstanceProfile: 
+    Type: AWS::IAM::InstanceProfile
+    Properties: 
+      Path: "/"
+      Roles: 
+        - !Ref HelloWorldRole
 
   HelloWorldInstance: 
     Type: AWS::EC2::Instance
@@ -287,6 +330,7 @@ Resources:
           systemctl start httpd
           systemctl enable httpd
           echo "<h1>Hello World from $(hostname -f)</h1>" > /var/www/html/index.html
+      IamInstanceProfile: !Ref HelloWorldInstanceProfile
       Tags: 
         - Key: Name
           Value: Hello World Instance
