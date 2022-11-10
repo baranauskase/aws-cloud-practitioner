@@ -46,13 +46,18 @@ Parameters:
     Description: Please specify the public key material for SSH authentication
     Type: String
 
-  DeployHelloWorldInstance:
+  DeployHelloWorldBaseInstance:
     Description: Please specify if Hello World instance should be deployed
     Type: String
     Default: false
     AllowedValues:
       - true
       - false
+
+  HelloWorldInstanceAMI:
+    Description: Please specify Hello World instance AMI
+    Type: String
+    Default: ''
 
 Mappings: 
   RegionMap: 
@@ -63,9 +68,13 @@ Conditions:
   DeployNatIsTrue: !Equals
       - !Ref DeployNat
       - true
-  DeployHelloWorldInstanceIsTrue: !Equals
-      - !Ref DeployHelloWorldInstance
+  DeployHelloWorldBaseInstanceIsTrue: !Equals
+      - !Ref DeployHelloWorldBaseInstance
       - true
+  DeployHelloWorldInstanceIsTrue: !Not
+    - !Equals
+      - !Ref HelloWorldInstanceAMI
+      - ''
 
 Resources:
 
@@ -268,7 +277,7 @@ Resources:
           CidrIp: 0.0.0.0/0
       Tags: 
         - Key: Name
-          Value: HelloWorld Instance SG
+          Value: !Sub ${EnvironmentName} Instance SG
 
   HelloWorldRole: 
     Type: AWS::IAM::Role
@@ -304,9 +313,9 @@ Resources:
       Roles: 
         - !Ref HelloWorldRole
 
-  HelloWorldInstance: 
+  HelloWorldBaseInstance: 
     Type: AWS::EC2::Instance
-    Condition: DeployHelloWorldInstanceIsTrue
+    Condition: DeployHelloWorldBaseInstanceIsTrue
     Properties:
       InstanceType: "t2.micro"
       ImageId: 
@@ -329,8 +338,51 @@ Resources:
           yum install -y httpd
           systemctl start httpd
           systemctl enable httpd
+      IamInstanceProfile: !Ref HelloWorldInstanceProfile
+      Tags: 
+        - Key: Name
+          Value: !Sub ${EnvironmentName} Base Instance
+
+  HelloWorldInstance: 
+    Type: AWS::EC2::Instance
+    Condition: DeployHelloWorldInstanceIsTrue
+    Properties:
+      InstanceType: "t2.micro"
+      ImageId: !Ref HelloWorldInstanceAMI
+      KeyName: !Ref KeyPair
+      NetworkInterfaces: 
+        - AssociatePublicIpAddress: true
+          DeviceIndex: 0
+          GroupSet: 
+            - !Ref HelloWorldInstanceSecurityGroup
+          SubnetId: !Ref PublicSubnet1
+      UserData: !Base64
+        "Fn::Sub": |
+          #!/bin/bash
+          set -o xtrace
           echo "<h1>Hello World from $(hostname -f)</h1>" > /var/www/html/index.html
       IamInstanceProfile: !Ref HelloWorldInstanceProfile
       Tags: 
         - Key: Name
-          Value: Hello World Instance
+          Value: !Sub ${EnvironmentName} Instance
+
+  HelloWorldVolume:
+    Type: AWS::EC2::Volume
+    Condition: DeployHelloWorldInstanceIsTrue
+    DeletionPolicy: Delete
+    Properties: 
+      Size: 20
+      VolumeType: gp2
+      Encrypted: true
+      AvailabilityZone: !GetAtt HelloWorldInstance.AvailabilityZone
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName} volume
+    
+  HelloWorldVolumeAttachment:
+    Type: AWS::EC2::VolumeAttachment
+    Condition: DeployHelloWorldInstanceIsTrue
+    Properties: 
+      Device: /dev/xvdf
+      InstanceId: !Ref HelloWorldInstance
+      VolumeId: !Ref HelloWorldVolume
