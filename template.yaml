@@ -34,14 +34,6 @@ Parameters:
     Type: String
     Default: 10.192.21.0/24
 
-  DeployNat:
-    Description: Please specify if NAT gateways need to be deployed to private subnets
-    Type: String
-    Default: false
-    AllowedValues:
-      - true
-      - false
-
   KeyPairPublicKeyMaterial:
     Description: Please specify the public key material for SSH authentication
     Type: String
@@ -65,9 +57,6 @@ Mappings:
       AMI: ami-0648ea225c13e0729
 
 Conditions:
-  DeployNatIsTrue: !Equals
-      - !Ref DeployNat
-      - true
   DeployHelloWorldBaseInstanceIsTrue: !Equals
       - !Ref DeployHelloWorldBaseInstance
       - true
@@ -78,6 +67,7 @@ Conditions:
 
 Resources:
 
+  # Start of Networking 
   VPC:
     Type: AWS::EC2::VPC
     Properties:
@@ -147,28 +137,28 @@ Resources:
 
   NatGateway1EIP:
     Type: AWS::EC2::EIP
-    Condition: DeployNatIsTrue
+    Condition: DeployHelloWorldBaseInstanceIsTrue
     DependsOn: InternetGatewayAttachment
     Properties:
       Domain: vpc
 
   NatGateway2EIP:
     Type: AWS::EC2::EIP
-    Condition: DeployNatIsTrue
+    Condition: DeployHelloWorldBaseInstanceIsTrue
     DependsOn: InternetGatewayAttachment
     Properties:
       Domain: vpc
 
   NatGateway1:
     Type: AWS::EC2::NatGateway
-    Condition: DeployNatIsTrue
+    Condition: DeployHelloWorldBaseInstanceIsTrue
     Properties:
       AllocationId: !GetAtt NatGateway1EIP.AllocationId
       SubnetId: !Ref PublicSubnet1
 
   NatGateway2:
     Type: AWS::EC2::NatGateway
-    Condition: DeployNatIsTrue
+    Condition: DeployHelloWorldBaseInstanceIsTrue
     Properties:
       AllocationId: !GetAtt NatGateway2EIP.AllocationId
       SubnetId: !Ref PublicSubnet2
@@ -211,7 +201,7 @@ Resources:
 
   DefaultPrivateRoute1:
     Type: AWS::EC2::Route
-    Condition: DeployNatIsTrue
+    Condition: DeployHelloWorldBaseInstanceIsTrue
     Properties:
       RouteTableId: !Ref PrivateRouteTable1
       DestinationCidrBlock: 0.0.0.0/0
@@ -233,7 +223,7 @@ Resources:
 
   DefaultPrivateRoute2:
     Type: AWS::EC2::Route
-    Condition: DeployNatIsTrue
+    Condition: DeployHelloWorldBaseInstanceIsTrue
     Properties:
       RouteTableId: !Ref PrivateRouteTable2
       DestinationCidrBlock: 0.0.0.0/0
@@ -245,12 +235,24 @@ Resources:
       RouteTableId: !Ref PrivateRouteTable2
       SubnetId: !Ref PrivateSubnet2
 
-  KeyPair:
-    Type: AWS::EC2::KeyPair
-    Properties: 
-      KeyName: hello-world-instance-key
-      KeyType: rsa
-      PublicKeyMaterial: !Ref KeyPairPublicKeyMaterial
+  # End of Networking 
+
+  # Start of Security Groups 
+
+  HelloWorldAlbSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow access to the API
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - Description: "Access from VPC"
+          IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+      Tags: 
+        - Key: Name
+          Value: !Sub ${EnvironmentName} application load balancer SG
 
   HelloWorldInstanceSecurityGroup:
     Type: AWS::EC2::SecurityGroup
@@ -259,25 +261,25 @@ Resources:
       VpcId: !Ref VPC
       SecurityGroupIngress:
         - IpProtocol: tcp
-          FromPort: 22
-          ToPort: 22
-          CidrIp: 0.0.0.0/0
-        - IpProtocol: tcp
           FromPort: 80
           ToPort: 80
-          CidrIp: 0.0.0.0/0
-      SecurityGroupEgress:
-        - IpProtocol: tcp
-          FromPort: 80
-          ToPort: 80
-          CidrIp: 0.0.0.0/0
-        - IpProtocol: tcp
-          FromPort: 443
-          ToPort: 443
-          CidrIp: 0.0.0.0/0
+          SourceSecurityGroupId: !Ref HelloWorldAlbSecurityGroup
+      # SecurityGroupEgress:
+      #   - IpProtocol: tcp
+      #     FromPort: 80
+      #     ToPort: 80
+      #     CidrIp: 0.0.0.0/0
+      #   - IpProtocol: tcp
+      #     FromPort: 443
+      #     ToPort: 443
+      #     CidrIp: 0.0.0.0/0
       Tags: 
         - Key: Name
           Value: !Sub ${EnvironmentName} Instance SG
+
+  # End of Security Groups
+
+  # Start of IAM Roles
 
   HelloWorldRole: 
     Type: AWS::IAM::Role
@@ -313,35 +315,47 @@ Resources:
       Roles: 
         - !Ref HelloWorldRole
 
-  HelloWorldBaseInstance: 
-    Type: AWS::EC2::Instance
-    Condition: DeployHelloWorldBaseInstanceIsTrue
-    Properties:
-      InstanceType: "t2.micro"
-      ImageId: 
-        Fn::FindInMap: 
-          - "RegionMap"
-          - Ref: "AWS::Region"
-          - "AMI"
-      KeyName: !Ref KeyPair
-      NetworkInterfaces: 
-        - AssociatePublicIpAddress: true
-          DeviceIndex: 0
-          GroupSet: 
-            - !Ref HelloWorldInstanceSecurityGroup
-          SubnetId: !Ref PublicSubnet1
-      UserData: !Base64
-        "Fn::Sub": |
-          #!/bin/bash
-          set -o xtrace
-          yum update -y
-          yum install -y httpd
-          systemctl start httpd
-          systemctl enable httpd
-      IamInstanceProfile: !Ref HelloWorldInstanceProfile
-      Tags: 
-        - Key: Name
-          Value: !Sub ${EnvironmentName} Base Instance
+  # End of IAM Roles
+
+  # Start of EC2 Instances
+
+  KeyPair:
+    Type: AWS::EC2::KeyPair
+    Properties: 
+      KeyName: hello-world-instance-key
+      KeyType: rsa
+      PublicKeyMaterial: !Ref KeyPairPublicKeyMaterial
+
+  # Replaced by ASG
+  # HelloWorldBaseInstance: 
+  #   Type: AWS::EC2::Instance
+  #   Condition: DeployHelloWorldBaseInstanceIsTrue
+  #   Properties:
+  #     InstanceType: "t2.micro"
+  #     ImageId: 
+  #       Fn::FindInMap: 
+  #         - "RegionMap"
+  #         - Ref: "AWS::Region"
+  #         - "AMI"
+  #     KeyName: !Ref KeyPair
+  #     NetworkInterfaces: 
+  #       - AssociatePublicIpAddress: false
+  #         DeviceIndex: 0
+  #         GroupSet: 
+  #           - !Ref HelloWorldInstanceSecurityGroup
+  #         SubnetId: !Ref PrivateSubnet1
+  #     UserData: !Base64
+  #       "Fn::Sub": |
+  #         #!/bin/bash
+  #         set -o xtrace
+  #         yum update -y
+  #         yum install -y httpd
+  #         systemctl start httpd
+  #         systemctl enable httpd
+  #     IamInstanceProfile: !Ref HelloWorldInstanceProfile
+  #     Tags: 
+  #       - Key: Name
+  #         Value: !Sub ${EnvironmentName} Base Instance
 
   HelloWorldInstance: 
     Type: AWS::EC2::Instance
@@ -355,7 +369,7 @@ Resources:
           DeviceIndex: 0
           GroupSet: 
             - !Ref HelloWorldInstanceSecurityGroup
-          SubnetId: !Ref PublicSubnet1
+          SubnetId: !Ref PrivateSubnet1
       UserData: !Base64
         "Fn::Sub": |
           #!/bin/bash
@@ -365,6 +379,10 @@ Resources:
       Tags: 
         - Key: Name
           Value: !Sub ${EnvironmentName} Instance
+
+  # End of EC2 Instances
+
+  # Start of EBS Volumes
 
   HelloWorldVolume:
     Type: AWS::EC2::Volume
@@ -386,3 +404,89 @@ Resources:
       Device: /dev/xvdf
       InstanceId: !Ref HelloWorldInstance
       VolumeId: !Ref HelloWorldVolume
+
+  # End of EBS Volumes
+
+  # Start of Load Balancing
+
+  HelloWorldAlb:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Condition: DeployHelloWorldBaseInstanceIsTrue
+    Properties: 
+      Scheme: internet-facing
+      SecurityGroups: 
+        - !Ref HelloWorldAlbSecurityGroup
+      Subnets:
+        - !Ref PublicSubnet1
+        - !Ref PublicSubnet2
+      Type: application
+
+  HelloWorldTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Condition: DeployHelloWorldBaseInstanceIsTrue
+    Properties:
+      HealthCheckEnabled: true
+      TargetType: instance
+      VpcId: !Ref VPC
+      Protocol: HTTP
+      Port: 80
+      # Replaced by ASG
+      # Targets:
+      #   - Id: !Ref HelloWorldBaseInstance
+
+  HelloWorldAlbListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Condition: DeployHelloWorldBaseInstanceIsTrue
+    Properties: 
+      DefaultActions: 
+        - Type: forward
+          TargetGroupArn: !Ref HelloWorldTargetGroup
+      LoadBalancerArn: !Ref HelloWorldAlb
+      Port: 80
+      Protocol: HTTP  
+
+  HelloWorldBaseTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties: 
+      LaunchTemplateName: !Sub ${AWS::StackName}-launch-template
+      LaunchTemplateData:
+        InstanceType: "t2.micro"
+        ImageId: 
+          Fn::FindInMap: 
+            - "RegionMap"
+            - Ref: "AWS::Region"
+            - "AMI"
+        KeyName: !Ref KeyPair
+        NetworkInterfaces: 
+          - AssociatePublicIpAddress: false
+            DeviceIndex: 0
+            Groups: 
+              - !Ref HelloWorldInstanceSecurityGroup
+        UserData: !Base64
+          "Fn::Sub": |
+            #!/bin/bash
+            set -o xtrace
+            yum update -y
+            yum install -y httpd
+            systemctl start httpd
+            systemctl enable httpd
+        IamInstanceProfile: 
+          Name: !Ref HelloWorldInstanceProfile
+
+  HelloWorldAsg:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Condition: DeployHelloWorldBaseInstanceIsTrue
+    Properties:
+      LaunchTemplate:
+        LaunchTemplateId: !Ref HelloWorldBaseTemplate
+        Version: !GetAtt HelloWorldBaseTemplate.LatestVersionNumber
+      MaxSize: '2'
+      MinSize: '0'
+      DesiredCapacity: '2'
+      TargetGroupARNs:
+        - !Ref HelloWorldTargetGroup
+      VPCZoneIdentifier:
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
+
+  # End of Load Balancing
