@@ -1,38 +1,13 @@
-AWSTemplateFormatVersion: '2010-09-09'
+AWSTemplateFormatVersion: "2010-09-09"
 Transform: AWS::Serverless-2016-10-31
 Description: >
-  This stack is used for preparing for AWS Cloud Practitioner Course
+  This stack is used for deploying EC2 and S3 resources in preparation for AWS Cloud Practitioner Course
 
 Parameters:
   EnvironmentName:
     Description: An environment name that is prefixed to resource names
     Type: String
     Default: dev
-
-  VpcCIDR:
-    Description: Please enter the IP range (CIDR notation) for this VPC
-    Type: String
-    Default: 10.192.0.0/16
-
-  PublicSubnet1CIDR:
-    Description: Please enter the IP range (CIDR notation) for the public subnet in the first Availability Zone
-    Type: String
-    Default: 10.192.10.0/24
-
-  PublicSubnet2CIDR:
-    Description: Please enter the IP range (CIDR notation) for the public subnet in the second Availability Zone
-    Type: String
-    Default: 10.192.11.0/24
-
-  PrivateSubnet1CIDR:
-    Description: Please enter the IP range (CIDR notation) for the private subnet in the first Availability Zone
-    Type: String
-    Default: 10.192.20.0/24
-
-  PrivateSubnet2CIDR:
-    Description: Please enter the IP range (CIDR notation) for the private subnet in the second Availability Zone
-    Type: String
-    Default: 10.192.21.0/24
 
   KeyPairPublicKeyMaterial:
     Description: Please specify the public key material for SSH authentication
@@ -49,208 +24,37 @@ Parameters:
   HelloWorldInstanceAMI:
     Description: Please specify Hello World instance AMI
     Type: String
-    Default: ''
+    Default: ""
 
-Mappings: 
-  RegionMap: 
+Mappings:
+  RegionMap:
     eu-west-2:
       AMI: ami-0648ea225c13e0729
 
 Conditions:
   DeployHelloWorldBaseInstanceIsTrue: !Equals
-      - !Ref DeployHelloWorldBaseInstance
-      - true
+    - !Ref DeployHelloWorldBaseInstance
+    - true
   DeployHelloWorldInstanceIsTrue: !Not
     - !Equals
       - !Ref HelloWorldInstanceAMI
-      - ''
+      - ""
 
 Resources:
-
-  # Start of Networking 
-  VPC:
-    Type: AWS::EC2::VPC
-    Properties:
-      CidrBlock: !Ref VpcCIDR
-      EnableDnsSupport: true
-      EnableDnsHostnames: true
-      Tags:
-        - Key: Name
-          Value: !Ref EnvironmentName
-
-  InternetGateway:
-    Type: AWS::EC2::InternetGateway
-    Properties:
-      Tags:
-        - Key: Name
-          Value: !Ref EnvironmentName
-
-  InternetGatewayAttachment:
-    Type: AWS::EC2::VPCGatewayAttachment
-    Properties:
-      InternetGatewayId: !Ref InternetGateway
-      VpcId: !Ref VPC
-
-  PublicSubnet1:
-    Type: AWS::EC2::Subnet
-    Properties:
-      VpcId: !Ref VPC
-      AvailabilityZone: !Select [ 0, !GetAZs '' ]
-      CidrBlock: !Ref PublicSubnet1CIDR
-      MapPublicIpOnLaunch: true
-      Tags:
-        - Key: Name
-          Value: !Sub ${EnvironmentName} Public Subnet (AZ1)
-
-  PublicSubnet2:
-    Type: AWS::EC2::Subnet
-    Properties:
-      VpcId: !Ref VPC
-      AvailabilityZone: !Select [ 1, !GetAZs  '' ]
-      CidrBlock: !Ref PublicSubnet2CIDR
-      MapPublicIpOnLaunch: true
-      Tags:
-        - Key: Name
-          Value: !Sub ${EnvironmentName} Public Subnet (AZ2)
-
-  PrivateSubnet1:
-    Type: AWS::EC2::Subnet
-    Properties:
-      VpcId: !Ref VPC
-      AvailabilityZone: !Select [ 0, !GetAZs  '' ]
-      CidrBlock: !Ref PrivateSubnet1CIDR
-      MapPublicIpOnLaunch: false
-      Tags:
-        - Key: Name
-          Value: !Sub ${EnvironmentName} Private Subnet (AZ1)
-
-  PrivateSubnet2:
-    Type: AWS::EC2::Subnet
-    Properties:
-      VpcId: !Ref VPC
-      AvailabilityZone: !Select [ 1, !GetAZs  '' ]
-      CidrBlock: !Ref PrivateSubnet2CIDR
-      MapPublicIpOnLaunch: false
-      Tags:
-        - Key: Name
-          Value: !Sub ${EnvironmentName} Private Subnet (AZ2)
-
-  NatGateway1EIP:
-    Type: AWS::EC2::EIP
-    Condition: DeployHelloWorldBaseInstanceIsTrue
-    DependsOn: InternetGatewayAttachment
-    Properties:
-      Domain: vpc
-
-  NatGateway2EIP:
-    Type: AWS::EC2::EIP
-    Condition: DeployHelloWorldBaseInstanceIsTrue
-    DependsOn: InternetGatewayAttachment
-    Properties:
-      Domain: vpc
-
-  NatGateway1:
-    Type: AWS::EC2::NatGateway
-    Condition: DeployHelloWorldBaseInstanceIsTrue
-    Properties:
-      AllocationId: !GetAtt NatGateway1EIP.AllocationId
-      SubnetId: !Ref PublicSubnet1
-
-  NatGateway2:
-    Type: AWS::EC2::NatGateway
-    Condition: DeployHelloWorldBaseInstanceIsTrue
-    Properties:
-      AllocationId: !GetAtt NatGateway2EIP.AllocationId
-      SubnetId: !Ref PublicSubnet2
-
-  PublicRouteTable:
-    Type: AWS::EC2::RouteTable
-    Properties:
-      VpcId: !Ref VPC
-      Tags:
-        - Key: Name
-          Value: !Sub ${EnvironmentName} Public Routes
-
-  DefaultPublicRoute:
-    Type: AWS::EC2::Route
-    DependsOn: InternetGatewayAttachment
-    Properties:
-      RouteTableId: !Ref PublicRouteTable
-      DestinationCidrBlock: 0.0.0.0/0
-      GatewayId: !Ref InternetGateway
-
-  PublicSubnet1RouteTableAssociation:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties:
-      RouteTableId: !Ref PublicRouteTable
-      SubnetId: !Ref PublicSubnet1
-
-  PublicSubnet2RouteTableAssociation:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties:
-      RouteTableId: !Ref PublicRouteTable
-      SubnetId: !Ref PublicSubnet2
-
-  PrivateRouteTable1:
-    Type: AWS::EC2::RouteTable
-    Properties:
-      VpcId: !Ref VPC
-      Tags:
-        - Key: Name
-          Value: !Sub ${EnvironmentName} Private Routes (AZ1)
-
-  DefaultPrivateRoute1:
-    Type: AWS::EC2::Route
-    Condition: DeployHelloWorldBaseInstanceIsTrue
-    Properties:
-      RouteTableId: !Ref PrivateRouteTable1
-      DestinationCidrBlock: 0.0.0.0/0
-      NatGatewayId: !Ref NatGateway1
-
-  PrivateSubnet1RouteTableAssociation:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties:
-      RouteTableId: !Ref PrivateRouteTable1
-      SubnetId: !Ref PrivateSubnet1
-
-  PrivateRouteTable2:
-    Type: AWS::EC2::RouteTable
-    Properties:
-      VpcId: !Ref VPC
-      Tags:
-        - Key: Name
-          Value: !Sub ${EnvironmentName} Private Routes (AZ2)
-
-  DefaultPrivateRoute2:
-    Type: AWS::EC2::Route
-    Condition: DeployHelloWorldBaseInstanceIsTrue
-    Properties:
-      RouteTableId: !Ref PrivateRouteTable2
-      DestinationCidrBlock: 0.0.0.0/0
-      NatGatewayId: !Ref NatGateway2
-
-  PrivateSubnet2RouteTableAssociation:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties:
-      RouteTableId: !Ref PrivateRouteTable2
-      SubnetId: !Ref PrivateSubnet2
-
-  # End of Networking 
-
-  # Start of Security Groups 
+  # Start of Security Groups
 
   HelloWorldAlbSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: Allow access to the API
-      VpcId: !Ref VPC
+      VpcId: !ImportValue VPC
       SecurityGroupIngress:
         - Description: "Access from VPC"
           IpProtocol: tcp
           FromPort: 80
           ToPort: 80
           CidrIp: 0.0.0.0/0
-      Tags: 
+      Tags:
         - Key: Name
           Value: !Sub ${EnvironmentName} application load balancer SG
 
@@ -258,22 +62,13 @@ Resources:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: Manages firewall for Demo EC2 instance
-      VpcId: !Ref VPC
+      VpcId: !ImportValue VPC
       SecurityGroupIngress:
         - IpProtocol: tcp
           FromPort: 80
           ToPort: 80
           SourceSecurityGroupId: !Ref HelloWorldAlbSecurityGroup
-      # SecurityGroupEgress:
-      #   - IpProtocol: tcp
-      #     FromPort: 80
-      #     ToPort: 80
-      #     CidrIp: 0.0.0.0/0
-      #   - IpProtocol: tcp
-      #     FromPort: 443
-      #     ToPort: 443
-      #     CidrIp: 0.0.0.0/0
-      Tags: 
+      Tags:
         - Key: Name
           Value: !Sub ${EnvironmentName} Instance SG
 
@@ -281,38 +76,38 @@ Resources:
 
   # Start of IAM Roles
 
-  HelloWorldRole: 
+  HelloWorldRole:
     Type: AWS::IAM::Role
-    Properties: 
-      AssumeRolePolicyDocument: 
+    Properties:
+      AssumeRolePolicyDocument:
         Version: "2012-10-17"
-        Statement: 
+        Statement:
           - Effect: "Allow"
-            Principal: 
-              Service: 
+            Principal:
+              Service:
                 - "ec2.amazonaws.com"
-            Action: 
+            Action:
               - "sts:AssumeRole"
       Path: "/"
 
-  HelloWorldRolePolicy: 
+  HelloWorldRolePolicy:
     Type: AWS::IAM::Policy
-    Properties: 
+    Properties:
       PolicyName: "root"
-      PolicyDocument: 
+      PolicyDocument:
         Version: "2012-10-17"
-        Statement: 
+        Statement:
           - Effect: "Allow"
             Action: "iam:ListUsers"
             Resource: "*"
-      Roles: 
+      Roles:
         - !Ref HelloWorldRole
 
-  HelloWorldInstanceProfile: 
+  HelloWorldInstanceProfile:
     Type: AWS::IAM::InstanceProfile
-    Properties: 
+    Properties:
       Path: "/"
-      Roles: 
+      Roles:
         - !Ref HelloWorldRole
 
   # End of IAM Roles
@@ -321,29 +116,29 @@ Resources:
 
   KeyPair:
     Type: AWS::EC2::KeyPair
-    Properties: 
+    Properties:
       KeyName: hello-world-instance-key
       KeyType: rsa
       PublicKeyMaterial: !Ref KeyPairPublicKeyMaterial
 
   # Replaced by ASG
-  # HelloWorldBaseInstance: 
+  # HelloWorldBaseInstance:
   #   Type: AWS::EC2::Instance
   #   Condition: DeployHelloWorldBaseInstanceIsTrue
   #   Properties:
   #     InstanceType: "t2.micro"
-  #     ImageId: 
-  #       Fn::FindInMap: 
+  #     ImageId:
+  #       Fn::FindInMap:
   #         - "RegionMap"
   #         - Ref: "AWS::Region"
   #         - "AMI"
   #     KeyName: !Ref KeyPair
-  #     NetworkInterfaces: 
+  #     NetworkInterfaces:
   #       - AssociatePublicIpAddress: false
   #         DeviceIndex: 0
-  #         GroupSet: 
+  #         GroupSet:
   #           - !Ref HelloWorldInstanceSecurityGroup
-  #         SubnetId: !Ref PrivateSubnet1
+  #         SubnetId: !ImportValue PrivateSubnet1
   #     UserData: !Base64
   #       "Fn::Sub": |
   #         #!/bin/bash
@@ -353,30 +148,30 @@ Resources:
   #         systemctl start httpd
   #         systemctl enable httpd
   #     IamInstanceProfile: !Ref HelloWorldInstanceProfile
-  #     Tags: 
+  #     Tags:
   #       - Key: Name
   #         Value: !Sub ${EnvironmentName} Base Instance
 
-  HelloWorldInstance: 
+  HelloWorldInstance:
     Type: AWS::EC2::Instance
     Condition: DeployHelloWorldInstanceIsTrue
     Properties:
       InstanceType: "t2.micro"
       ImageId: !Ref HelloWorldInstanceAMI
       KeyName: !Ref KeyPair
-      NetworkInterfaces: 
+      NetworkInterfaces:
         - AssociatePublicIpAddress: true
           DeviceIndex: 0
-          GroupSet: 
+          GroupSet:
             - !Ref HelloWorldInstanceSecurityGroup
-          SubnetId: !Ref PrivateSubnet1
+          SubnetId: !ImportValue PrivateSubnet1
       UserData: !Base64
         "Fn::Sub": |
           #!/bin/bash
           set -o xtrace
           echo "<h1>Hello World from $(hostname -f)</h1>" > /var/www/html/index.html
       IamInstanceProfile: !Ref HelloWorldInstanceProfile
-      Tags: 
+      Tags:
         - Key: Name
           Value: !Sub ${EnvironmentName} Instance
 
@@ -388,7 +183,7 @@ Resources:
     Type: AWS::EC2::Volume
     Condition: DeployHelloWorldInstanceIsTrue
     DeletionPolicy: Delete
-    Properties: 
+    Properties:
       Size: 20
       VolumeType: gp2
       Encrypted: true
@@ -396,11 +191,11 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub ${EnvironmentName} volume
-    
+
   HelloWorldVolumeAttachment:
     Type: AWS::EC2::VolumeAttachment
     Condition: DeployHelloWorldInstanceIsTrue
-    Properties: 
+    Properties:
       Device: /dev/xvdf
       InstanceId: !Ref HelloWorldInstance
       VolumeId: !Ref HelloWorldVolume
@@ -412,13 +207,13 @@ Resources:
   HelloWorldAlb:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
     Condition: DeployHelloWorldBaseInstanceIsTrue
-    Properties: 
+    Properties:
       Scheme: internet-facing
-      SecurityGroups: 
+      SecurityGroups:
         - !Ref HelloWorldAlbSecurityGroup
       Subnets:
-        - !Ref PublicSubnet1
-        - !Ref PublicSubnet2
+        - !ImportValue PublicSubnet1
+        - !ImportValue PublicSubnet2
       Type: application
 
   HelloWorldTargetGroup:
@@ -427,7 +222,7 @@ Resources:
     Properties:
       HealthCheckEnabled: true
       TargetType: instance
-      VpcId: !Ref VPC
+      VpcId: !ImportValue VPC
       Protocol: HTTP
       Port: 80
       # Replaced by ASG
@@ -437,30 +232,30 @@ Resources:
   HelloWorldAlbListener:
     Type: AWS::ElasticLoadBalancingV2::Listener
     Condition: DeployHelloWorldBaseInstanceIsTrue
-    Properties: 
-      DefaultActions: 
+    Properties:
+      DefaultActions:
         - Type: forward
           TargetGroupArn: !Ref HelloWorldTargetGroup
       LoadBalancerArn: !Ref HelloWorldAlb
       Port: 80
-      Protocol: HTTP  
+      Protocol: HTTP
 
   HelloWorldBaseTemplate:
     Type: AWS::EC2::LaunchTemplate
-    Properties: 
+    Properties:
       LaunchTemplateName: !Sub ${AWS::StackName}-launch-template
       LaunchTemplateData:
         InstanceType: "t2.micro"
-        ImageId: 
-          Fn::FindInMap: 
+        ImageId:
+          Fn::FindInMap:
             - "RegionMap"
             - Ref: "AWS::Region"
             - "AMI"
         KeyName: !Ref KeyPair
-        NetworkInterfaces: 
+        NetworkInterfaces:
           - AssociatePublicIpAddress: false
             DeviceIndex: 0
-            Groups: 
+            Groups:
               - !Ref HelloWorldInstanceSecurityGroup
         UserData: !Base64
           "Fn::Sub": |
@@ -470,7 +265,7 @@ Resources:
             yum install -y httpd
             systemctl start httpd
             systemctl enable httpd
-        IamInstanceProfile: 
+        IamInstanceProfile:
           Name: !Ref HelloWorldInstanceProfile
 
   HelloWorldAsg:
@@ -480,18 +275,18 @@ Resources:
       LaunchTemplate:
         LaunchTemplateId: !Ref HelloWorldBaseTemplate
         Version: !GetAtt HelloWorldBaseTemplate.LatestVersionNumber
-      MaxSize: '2'
-      MinSize: '0'
-      DesiredCapacity: '2'
+      MaxSize: "2"
+      MinSize: "0"
+      DesiredCapacity: "2"
       TargetGroupARNs:
         - !Ref HelloWorldTargetGroup
       VPCZoneIdentifier:
-        - !Ref PrivateSubnet1
-        - !Ref PrivateSubnet2
+        - !ImportValue PrivateSubnet1
+        - !ImportValue PrivateSubnet2
 
   # End of Load Balancing
 
-  # S3 Demo
+  # Start of S3
 
   BucketBackupRole:
     Type: AWS::IAM::Role
@@ -499,7 +294,7 @@ Resources:
       AssumeRolePolicyDocument:
         Statement:
           - Action:
-              - 'sts:AssumeRole'
+              - "sts:AssumeRole"
             Effect: Allow
             Principal:
               Service:
@@ -515,19 +310,19 @@ Resources:
               - s3:ListBucket
             Effect: Allow
             Resource:
-              - !Sub 'arn:aws:s3:::${DemoBucket}'
+              - !Sub "arn:aws:s3:::${DemoBucket}"
           - Action:
               - s3:GetObjectVersion
               - s3:GetObjectVersionAcl
             Effect: Allow
             Resource:
-              - !Sub 'arn:aws:s3:::${DemoBucket}/*'
+              - !Sub "arn:aws:s3:::${DemoBucket}/*"
           - Action:
               - s3:ReplicateObject
               - s3:ReplicateDelete
             Effect: Allow
             Resource:
-              - !Sub 'arn:aws:s3:::${DemoBucketReplica}/*'
+              - !Sub "arn:aws:s3:::${DemoBucketReplica}/*"
       PolicyName: BucketBackupPolicy
       Roles:
         - !Ref BucketBackupRole
@@ -536,17 +331,17 @@ Resources:
     Type: AWS::S3::Bucket
     DeletionPolicy: Delete
     Properties:
-      BucketName: !Sub 'demo-bucket-${AWS::AccountId}'
+      BucketName: !Sub "demo-bucket-${AWS::AccountId}"
       VersioningConfiguration:
         Status: Enabled
       ReplicationConfiguration:
         Role: !GetAtt BucketBackupRole.Arn
         Rules:
           - Destination:
-              Bucket: !Sub 'arn:aws:s3:::${DemoBucketReplica}'
+              Bucket: !Sub "arn:aws:s3:::${DemoBucketReplica}"
               StorageClass: STANDARD
             Id: Backup
-            Prefix: ''
+            Prefix: ""
             Status: Enabled
       PublicAccessBlockConfiguration:
         BlockPublicAcls: true
@@ -554,7 +349,7 @@ Resources:
         IgnorePublicAcls: true
         RestrictPublicBuckets: false
       WebsiteConfiguration:
-        IndexDocument: index.html  
+        IndexDocument: index.html
 
   DemoBucketPolicy:
     Type: AWS::S3::BucketPolicy
@@ -566,15 +361,15 @@ Resources:
           - Action:
               - s3:GetObject
             Effect: Allow
-            Resource: 
+            Resource:
               - !Sub "arn:aws:s3:::${DemoBucket}/*"
-            Principal: '*'
+            Principal: "*"
 
   DemoBucketReplica:
     Type: AWS::S3::Bucket
     DeletionPolicy: Delete
     Properties:
-      BucketName: !Sub 'demo-bucket-replica-${AWS::AccountId}'
+      BucketName: !Sub "demo-bucket-replica-${AWS::AccountId}"
       VersioningConfiguration:
         Status: Enabled
       # BucketEncryption:
@@ -589,6 +384,6 @@ Resources:
         IgnorePublicAcls: false
         RestrictPublicBuckets: false
       # WebsiteConfiguration:
-      #   IndexDocument: index.html  
+      #   IndexDocument: index.html
 
-  # End of S3 Demo
+  # End of S3

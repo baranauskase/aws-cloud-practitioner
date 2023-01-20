@@ -1,0 +1,39 @@
+# Aurora Demo
+
+AtlasDBSubnetGroup:
+  Type: AWS::RDS::DBSubnetGroup
+  Properties:
+    DBSubnetGroupDescription: "Private subnets where Atlas RDS instance can be attached"
+    SubnetIds: !Ref PrivateSubnets
+
+DemoAuroraDBCluster:
+  Type: AWS::RDS::DBCluster
+  Properties:
+    Engine: aurora-postgresql
+    EngineVersion: "13.8"
+    MasterUsername: "postgres"
+    MasterUserPassword: "{{resolve:ssm-secure:atlas-db-master-password:2}}"
+    ServerlessV2ScalingConfiguration:
+      MinCapacity: 0.5
+      MaxCapacity: 2
+    NetworkType: IPV4
+    DBSubnetGroupName: !Ref AtlasDBSubnetGroup
+    VpcSecurityGroupIds:
+      - !Ref CACINetworkPostgresAccessSG
+      - !Ref AtlasDBAccessSG
+    StorageEncrypted: true
+    Port: 5432
+    EnableIAMDatabaseAuthentication: true
+
+InsiteEverywhereDBInstance1:
+  Type: AWS::RDS::DBInstance
+  Properties:
+    Engine: aurora-postgresql
+    DBInstanceClass: db.serverless
+    DBClusterIdentifier: !Ref InsiteEverywhereDBCluster
+    Tags:
+      - Key: Stack
+        Value: !Ref AWS::StackName
+      - Key: Environment
+        Value: !Ref TagEnv
+# End of Aurora Demo
