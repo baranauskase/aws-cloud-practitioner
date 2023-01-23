@@ -1,39 +1,83 @@
-# Aurora Demo
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  This stack is used for deploying EC2 and S3 resources in preparation for AWS Cloud Practitioner Course
 
-AtlasDBSubnetGroup:
-  Type: AWS::RDS::DBSubnetGroup
-  Properties:
-    DBSubnetGroupDescription: "Private subnets where Atlas RDS instance can be attached"
-    SubnetIds: !Ref PrivateSubnets
+Parameters:
+  EnvironmentName:
+    Description: An environment name that is prefixed to resource names
+    Type: String
+    Default: dev
+  DemoRdsllocatedStorage:
+    Description: "EBS Volume Size for Demo database"
+    Type: String
+    Default: "20"
+  DemoRdsInstanceType:
+    Description: Instance type for Demo database.
+    Type: String
+    Default: db.t3.micro
+    AllowedValues: 
+      - db.t3.micro
+      - db.t3.small
+      - db.t3.medium
+Resources:
+  RdsSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: "Private subnets where Demo RDS instance can be attached"
+      SubnetIds:
+        - !ImportValue PrivateSubnet1
+        - !ImportValue PrivateSubnet2
 
-DemoAuroraDBCluster:
-  Type: AWS::RDS::DBCluster
-  Properties:
-    Engine: aurora-postgresql
-    EngineVersion: "13.8"
-    MasterUsername: "postgres"
-    MasterUserPassword: "{{resolve:ssm-secure:atlas-db-master-password:2}}"
-    ServerlessV2ScalingConfiguration:
-      MinCapacity: 0.5
-      MaxCapacity: 2
-    NetworkType: IPV4
-    DBSubnetGroupName: !Ref AtlasDBSubnetGroup
-    VpcSecurityGroupIds:
-      - !Ref CACINetworkPostgresAccessSG
-      - !Ref AtlasDBAccessSG
-    StorageEncrypted: true
-    Port: 5432
-    EnableIAMDatabaseAuthentication: true
+  DemoRdsAccessSG:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: Allow CACI to access Document DB services
+      VpcId: !ImportValue  VPC
+      SecurityGroupIngress:
+      - Description: "Access from VPC"
+        IpProtocol: tcp
+        FromPort: 5432
+        ToPort: 5432
+        CidrIp: !ImportValue  VpcCIDR
 
-InsiteEverywhereDBInstance1:
-  Type: AWS::RDS::DBInstance
-  Properties:
-    Engine: aurora-postgresql
-    DBInstanceClass: db.serverless
-    DBClusterIdentifier: !Ref InsiteEverywhereDBCluster
-    Tags:
-      - Key: Stack
-        Value: !Ref AWS::StackName
-      - Key: Environment
-        Value: !Ref TagEnv
-# End of Aurora Demo
+  DemoRdsAdminCredentials:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Description: Demo RDS admin credentials
+      GenerateSecretString:
+        SecretStringTemplate: '{"username": "master"}'
+        GenerateStringKey: password
+        PasswordLength: 32
+        ExcludeCharacters: '"@/\'
+
+  DemoRds:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      AllocatedStorage: !Ref DemoRdsllocatedStorage
+      AllowMajorVersionUpgrade: false
+      AutoMinorVersionUpgrade: true
+      BackupRetentionPeriod: 7
+      DBInstanceClass: !Ref DemoRdsInstanceType
+      DBInstanceIdentifier: !Sub "${AWS::StackName}-demo-db"
+      DBSubnetGroupName: !Ref RdsSubnetGroup
+      DeleteAutomatedBackups: true
+      DeletionProtection: true
+      EnableIAMDatabaseAuthentication: true
+      EnablePerformanceInsights: false
+      Engine: postgres
+      EngineVersion: "13.3"
+      MasterUsername: !Sub '{{resolve:secretsmanager:${DemoRdsAdminCredentials}::username}}'
+      MasterUserPassword: !Sub '{{resolve:secretsmanager:${DemoRdsAdminCredentials}::password}}'
+      MultiAZ: false
+      PubliclyAccessible: false
+      StorageEncrypted: true
+      StorageType: gp2
+      MultiAZ: false
+      VPCSecurityGroups: 
+        - !Ref DemoRdsAccessSG
+      Tags:
+        - Key: Stack
+          Value: !Ref AWS::StackName
+        - Key: Environment
+          Value: !Ref EnvironmentName

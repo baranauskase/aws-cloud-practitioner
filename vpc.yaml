@@ -220,6 +220,12 @@ Outputs:
     Export:
       Name: VPC
 
+  VpcCIDR:
+    Description: Virtual Private Clout CIDR.
+    Value: !Ref VpcCIDR
+    Export:
+      Name: VpcCIDR
+
   PublicSubnet1:
     Description: Public subnet 1.
     Value: !Ref PublicSubnet1
