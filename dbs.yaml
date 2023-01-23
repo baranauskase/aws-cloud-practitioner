@@ -81,3 +81,18 @@ Resources:
           Value: !Ref AWS::StackName
         - Key: Environment
           Value: !Ref EnvironmentName
+
+  DemoDynamoDBTable: 
+    Type: AWS::DynamoDB::Table
+    Properties: 
+      AttributeDefinitions: 
+        - 
+          AttributeName: "UserId"
+          AttributeType: "N"
+      KeySchema: 
+        - 
+          AttributeName: "UserId"
+          KeyType: "HASH"
+      ProvisionedThroughput: 
+        ReadCapacityUnits: "1"
+        WriteCapacityUnits: "1"
